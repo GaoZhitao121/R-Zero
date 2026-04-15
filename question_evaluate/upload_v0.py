@@ -1,16 +1,16 @@
 import json
-from datasets import Dataset
+import huggingface_hub
+from datasets import Dataset, DatasetDict
+from huggingface_hub import login
 import argparse
+import json
 import os
-import matplotlib.pyplot as plt
-
-# 读取本地存储路径
 STORAGE_PATH = os.getenv("STORAGE_PATH")
-print(f"Storage path: {STORAGE_PATH}")
-
-# 移除 Hugging Face login 相关逻辑
-# 不再需要 HUGGINGFACENAME 和 tokens.json
-
+HUGGINGFACENAME = os.getenv("HUGGINGFACENAME")
+print(STORAGE_PATH)
+with open('tokens.json', 'r') as f:
+    token = json.load(f)['huggingface']
+login(token=token)
 parser = argparse.ArgumentParser()
 parser.add_argument("--repo_name", type=str, default="")
 parser.add_argument("--max_score", type=float, default=0.7)
@@ -28,6 +28,7 @@ for i in range(8):
         print(f"File {args.experiment_name}_{i}_results.json not found")
         continue
 
+
 for i in range(8):
     try:
         os.remove(f'{STORAGE_PATH}/generated_question/{args.experiment_name}_{i}_results.json')
@@ -36,23 +37,24 @@ for i in range(8):
         continue
 
 scores = [data['score'] for data in datas]
-
-# 打印分数分布图
+#  print the distribution of scores
+import matplotlib.pyplot as plt
 plt.hist(scores, bins=11)
 plt.savefig('scores_distribution.png')
 
-# 过滤并保存数据集到本地
+#count the number  of score between 0.2 and 0.8 
 if not args.repo_name == "":
     filtered_datas = [{'problem':data['question'],'answer':data['answer'],'score':data['score']} for data in datas if data['score'] >= args.min_score and data['score'] <= args.max_score and data['answer'] != '' and data['answer']!= 'None']
-    print(f"Filtered data length: {len(filtered_datas)}")
-    
+    print(len(filtered_datas))
     train_dataset = Dataset.from_list(filtered_datas)
-    
-    # 修改点：创建一个用于存放本地数据集的文件夹
-    output_dir = f"{STORAGE_PATH}/generated_datasets"
-    os.makedirs(output_dir, exist_ok=True)
-    
-    # 修改点：将数据集保存为本地的 Parquet 文件，而不是 push_to_hub
-    local_dataset_path = f"{output_dir}/{args.repo_name}.parquet"
-    train_dataset.to_parquet(local_dataset_path)
-    print(f"Dataset successfully saved locally to: {local_dataset_path}")
+    dataset_dict = {"train": train_dataset}
+    config_name = f"{args.experiment_name}"
+    dataset = DatasetDict(dataset_dict)
+    dataset.push_to_hub(f"{HUGGINGFACENAME}/{args.repo_name}",private=True,config_name=config_name)
+
+
+
+
+
+
+
